@@ -1,0 +1,25 @@
+[package]
+name = "skyline-ex"
+version = "0.1.0"
+edition = "2018"
+authors = ["Shadów", "blujay"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dependencies]
+nn = { git = "https://github.com/blu-dev/nn-rs" }
+
+[patch.'https://github.com/blu-dev/nn-rs']
+nn = { path = "../../nn-rs" }
+
+[build-dependencies]
+ex-build = { path = "../ex-build" }
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = true
