@@ -95,8 +95,20 @@ pub fn devkita64_path() -> Result<PathBuf, EnvironmentError> {
     }
 }
 
+#[cfg(target_os = "windows")]
+static GPP_FILE_PATH: &'static str = "bin/aarch64-none-elf-g++.exe";
+
+#[cfg(target_os = "windows")]
+static GCC_FILE_PATH: &'static str = "bin/aarch64-none-elf-gcc.exe";
+
+#[cfg(not(target_os = "windows"))]
+static GPP_FILE_PATH: &'static str = "bin/aarch64-none-elf-g++";
+
+#[cfg(not(target_os = "windows"))]
+static GCC_FILE_PATH: &'static str = "bin/aarch64-none-elf-gcc";
+
 pub fn gpp_compiler_path() -> Result<PathBuf, EnvironmentError> {
-    let compiler_path = devkita64_path()?.join("bin/aarch64-none-elf-g++");
+    let compiler_path = devkita64_path()?.join(GPP_FILE_PATH);
 
     if compiler_path.exists() {
         Ok(compiler_path)
@@ -106,7 +118,7 @@ pub fn gpp_compiler_path() -> Result<PathBuf, EnvironmentError> {
 }
 
 pub fn gcc_compiler_path() -> Result<PathBuf, EnvironmentError> {
-    let compiler_path = devkita64_path()?.join("bin/aarch64-none-elf-gcc");
+    let compiler_path = devkita64_path()?.join(GCC_FILE_PATH);
 
     if compiler_path.exists() {
         Ok(compiler_path)
