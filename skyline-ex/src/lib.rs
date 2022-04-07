@@ -1,7 +1,5 @@
-#![no_std]
-#![feature(default_alloc_error_handler)]
-
-use core::panic::PanicInfo;
+// #![no_std]
+// #![feature(default_alloc_error_handler)]
 
 mod alloc;
 mod bootstrap;
@@ -15,9 +13,4 @@ pub unsafe fn main() {
     let file = nn::fs::open_file("sd:/rust-test.txt", nn::fs::OpenMode::WRITE | nn::fs::OpenMode::ALLOW_APPEND).unwrap();
     let _ = nn::fs::write_file(file, 0, "Hello world!".as_ptr() as _, "Hello world!".len(), nn::fs::WriteOptions::FLUSH);
     nn::fs::close_file(file);
-}
-
-#[panic_handler]
-fn panic(_panic: &PanicInfo<'_>) -> ! {
-    loop {}
 }

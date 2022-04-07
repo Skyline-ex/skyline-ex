@@ -30,7 +30,7 @@ pub fn compile() {
 
     println!("cargo:rustc-link-lib=static=stdc++");
     println!("cargo:rustc-link-lib=static=gcc");
-    println!("cargo:rustc-cdylib-link-args=--shared --export-dynamic --gc-sections --build-id=sha1 --nx-module-name -init=exl_module_init --exclude-libs=ALL");
+    println!("cargo:rustc-cdylib-link-args=--shared --export-dynamic --gc-sections --build-id=sha1 --nx-module-name -init=exl_module_init --exclude-libs=ALLb");
 
     cc::Build::new()
         .compiler(env::gcc_compiler_path().unwrap())
