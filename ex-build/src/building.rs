@@ -35,7 +35,7 @@ pub struct BuildPaths {
     pub source_files: Vec<PathBuf>,
     pub include_files: Vec<PathBuf>,
     pub include_directories: Vec<PathBuf>,
-    pub link_directories: Vec<PathBuf>
+    pub link_directories: Vec<PathBuf>,
 }
 
 impl BuildPaths {
@@ -48,7 +48,10 @@ impl BuildPaths {
             let entry = match entry {
                 Ok(e) => e,
                 Err(e) => {
-                    eprintln!("[ex-build::building] Failed to retrieve directory entry, skipping: {:?}", e);
+                    eprintln!(
+                        "[ex-build::building] Failed to retrieve directory entry, skipping: {:?}",
+                        e
+                    );
                     continue;
                 }
             };
@@ -60,7 +63,10 @@ impl BuildPaths {
             let extension = match entry.path().extension().map(|ext| ext.to_str()).flatten() {
                 Some(ext) => ext,
                 None => {
-                    eprintln!("[ex-build::building] File path '{}' does not have an extension, skipping.", entry.path().display());
+                    eprintln!(
+                        "[ex-build::building] File path '{}' does not have an extension, skipping.",
+                        entry.path().display()
+                    );
                     continue;
                 }
             };
@@ -74,35 +80,35 @@ impl BuildPaths {
     }
 
     fn discover_source_files() -> Result<Vec<PathBuf>, BuildError> {
-        static SOURCE_EXTENSIONS: &[&str] = &[
-            "cpp",
-            "cc",
-            "s"
-        ];
+        static SOURCE_EXTENSIONS: &[&str] = &["cpp", "cc", "s"];
 
         let source_files = Self::discover_files_by_extensions(SOURCE_EXTENSIONS)?;
-        Ok(source_files.into_iter().filter_map(|path| {
-            if path.file_name().map(|name| name.to_str()).flatten().map(|name| name == "main.cpp").unwrap_or(false) {
-                None
-            } else {
-                Some(path)
-            }
-        }).collect())
+        Ok(source_files
+            .into_iter()
+            .filter_map(|path| {
+                if path
+                    .file_name()
+                    .map(|name| name.to_str())
+                    .flatten()
+                    .map(|name| name == "main.cpp" || name == "crt0.s")
+                    .unwrap_or(false)
+                {
+                    None
+                } else {
+                    Some(path)
+                }
+            })
+            .collect())
     }
 
     fn discover_c_source_files() -> Result<Vec<PathBuf>, BuildError> {
-        static SOURCE_EXTENSIONS: &[&str] = &[
-            "c"
-        ];
+        static SOURCE_EXTENSIONS: &[&str] = &["c"];
 
         Self::discover_files_by_extensions(SOURCE_EXTENSIONS)
     }
 
     fn discover_header_files() -> Result<Vec<PathBuf>, BuildError> {
-        static HEADER_EXTENSIONS: &[&str] = &[
-            "h",
-            "hpp"
-        ];
+        static HEADER_EXTENSIONS: &[&str] = &["h", "hpp"];
 
         Self::discover_files_by_extensions(HEADER_EXTENSIONS)
     }
@@ -116,7 +122,10 @@ impl BuildPaths {
             let entry = match entry {
                 Ok(e) => e,
                 Err(e) => {
-                    eprintln!("[ex-build::building] Failed to retrieve directory entry, skipping: {:?}", e);
+                    eprintln!(
+                        "[ex-build::building] Failed to retrieve directory entry, skipping: {:?}",
+                        e
+                    );
                     continue;
                 }
             };
@@ -151,7 +160,10 @@ impl BuildPaths {
             let entry = match entry {
                 Ok(e) => e,
                 Err(e) => {
-                    eprintln!("[ex-build::building] Failed to retrieve directory entry, skipping: {:?}", e);
+                    eprintln!(
+                        "[ex-build::building] Failed to retrieve directory entry, skipping: {:?}",
+                        e
+                    );
                     continue;
                 }
             };
@@ -180,7 +192,7 @@ impl BuildPaths {
             source_files: Self::discover_source_files()?,
             include_files: Self::discover_header_files()?,
             include_directories: Self::discover_include_directories()?,
-            link_directories: Self::discover_link_directories()?
+            link_directories: Self::discover_link_directories()?,
         })
     }
 }

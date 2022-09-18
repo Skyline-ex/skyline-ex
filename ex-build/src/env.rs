@@ -33,7 +33,7 @@ pub enum EnvironmentError {
 
     /// Any other IO error that does not have explicit error handling
     #[error("Unhandled IO Error: {0:?}")]
-    IO(#[from] std::io::Error)
+    IO(#[from] std::io::Error),
 }
 
 /// Retrieves the root of the repository for skyline-ex
@@ -42,14 +42,15 @@ pub fn repository_root_path() -> Result<PathBuf, EnvironmentError> {
     let manifest_dir = manifest_root_path()?;
 
     // attempt to get the parent of that project directory, as it should be the repository root
-    manifest_dir.parent()
+    manifest_dir
+        .parent()
         .map(|dir| dir.to_path_buf())
         .ok_or(EnvironmentError::NoManifestParentDir(manifest_dir))
 }
 
 /// Retrieves the root of the exlaunch folder in the repository
 pub fn exlaunch_root_path() -> Result<PathBuf, EnvironmentError> {
-    // get the repository root (at any point in building it should be safe to assume that the 
+    // get the repository root (at any point in building it should be safe to assume that the
     // folder structure is identical to the one on GitHub)
     let repo_root = repository_root_path()?;
 
@@ -68,6 +69,12 @@ pub fn exlaunch_root_path() -> Result<PathBuf, EnvironmentError> {
     }
 }
 
+pub fn cargo_home_path() -> Result<PathBuf, EnvironmentError> {
+    env::var("CARGO_HOME")
+        .map_err(|_| EnvironmentError::NoManifestDir)
+        .map(PathBuf::from)
+}
+
 pub fn manifest_root_path() -> Result<PathBuf, EnvironmentError> {
     env::var("CARGO_MANIFEST_DIR")
         .map_err(|_| EnvironmentError::NoManifestDir)
@@ -82,8 +89,8 @@ pub fn devkitpro_path() -> Result<PathBuf, EnvironmentError> {
 
 /// Retrieves the path to devkitpro for our needs (in this case it is devkitA64)
 pub fn devkita64_path() -> Result<PathBuf, EnvironmentError> {
-    let devkitpro_path = devkitpro_path()?;    
-    
+    let devkitpro_path = devkitpro_path()?;
+
     // the path for devkitA64 is DEVKITPRO/devkitA64
     let devkita64_path = devkitpro_path.join("devkitA64");
 

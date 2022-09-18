@@ -2,11 +2,11 @@
 name = "skyline-ex"
 version = "0.1.0"
 edition = "2018"
-authors = ["Shadów", "blujay"]
+authors = ["Shadów", "blujay", "Raytwo"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-nn = { git = "https://github.com/blu-dev/nn-rs" }
+nn = { path = "../../nn-rs" }
 
 [build-dependencies]
 ex-build = { path = "../ex-build" }

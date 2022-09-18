@@ -7,7 +7,7 @@
 
 #define EXL_DEBUG
 
-#define EXL_USE_FAKEHEAP
+// #define EXL_USE_FAKEHEAP
 
 /*
 #define EXL_SUPPORTS_REBOOTPAYLOAD

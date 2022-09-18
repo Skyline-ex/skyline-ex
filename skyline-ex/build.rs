@@ -105,8 +105,8 @@
 // }
 
 fn main() {
-    ex_build::copy_link_script();
     ex_build::compile();
+    // ex_build::restore_link_script();
     // panic!();
 
     // let sources = collect_source_files();
@@ -116,7 +116,7 @@ fn main() {
     //     Ok(dir) => dir,
     //     Err(e) => panic!("Failed to get the source directory of exlaunch")
     // };
-    
+
     // println!("cargo:rerun-if-changed=build.rs");
     // for file in &sources {
     //     println!("cargo:rerun-if-changed={}", file.display());
