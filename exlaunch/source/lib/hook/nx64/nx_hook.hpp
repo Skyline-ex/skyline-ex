@@ -32,12 +32,26 @@
 
 #include <cstring>
 #include <type_traits>
+#include "lib/reloc/rtld.hpp"
 
 namespace exl::hook::nx64 {
+
+    enum HookHandlerType : unsigned char {
+        Hook = 0,
+        Inline = 1,
+        InlineEx = 2,
+        Detour = 3
+    };
 
     struct HookData;
     struct HookCtx {
         HookData* data;
+    };
+    struct PltHookData {
+        uintptr_t callback;
+        PltHookData* next;
+        uintptr_t* p_callback_trampoline;
+        HookHandlerType ty;
     };
 
     static_assert(sizeof(HookCtx) == 0x8);
@@ -56,12 +70,6 @@ namespace exl::hook::nx64 {
     static_assert(offsetof(HookData,    handler) == 0x10);
     static_assert(offsetof(HookData, is_enabled) == 0x18);
 
-    enum HookHandlerType : unsigned char {
-        Hook = 0,
-        Inline = 1,
-        InlineEx = 2,
-        Detour = 3
-    };
 
     template<typename T>
     concept RealFunction = std::is_function_v<T> || std::is_function_v<std::remove_pointer_t<T>> || std::is_function_v<std::remove_reference_t<T>>;
@@ -139,6 +147,7 @@ namespace exl::hook::nx64 {
     }
 
     extern "C" const void* install_hook(const void* symbol, const void* replace, HookHandlerType ty);
+    extern "C" void install_hook_in_plt(rtld::ModuleObject* host_object, const void* function, const void* replace, void** out_trampoline, HookHandlerType ty);
 
     //void InlineHook(uintptr_t addr, InlineCallback* callback);
 };

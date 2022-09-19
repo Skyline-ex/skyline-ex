@@ -1,5 +1,5 @@
 #include "common.hpp"
-
+#include <cstring>
 #include "program/setting.hpp"
 
 extern "C" {

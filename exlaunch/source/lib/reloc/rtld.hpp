@@ -19,8 +19,8 @@ namespace rtld {
 }
 
 namespace nn::ro::detail {
-    extern ModuleObjectList g_pManualLoadList;
-    extern ModuleObjectList g_pAutoLoadList;
+    extern ModuleObjectList* g_pManualLoadList;
+    extern ModuleObjectList* g_pAutoLoadList;
     extern bool g_RoDebugFlag;
     extern lookup_global_t g_LookupGlobalManualFunctionPointer;
 };

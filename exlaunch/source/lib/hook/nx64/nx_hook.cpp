@@ -34,6 +34,7 @@
 #include "util/sys/rw_pages.hpp"
 #include "util/sys/mem_layout.hpp"
 #include "pointer_map.hpp"
+#include "lib/reloc/rtld/utils.hpp"
 
 
 #define __attribute __attribute__
@@ -49,6 +50,10 @@
 #define __countof(x) static_cast<intptr_t>(sizeof(x) / sizeof((x)[0]))  // must be signed
 #define __atomic_increase(p) __sync_add_and_fetch(p, 1)
 #define __sync_cmpswap(p, v, n) __sync_bool_compare_and_swap(p, v, n)
+
+extern "C" {
+    bool _ZNK2nn2ro6detail8RoModule10ResolveSymEPmNS1_3Elf5Elf643SymE();
+}
 
 namespace exl::hook::nx64 {
 
@@ -605,6 +610,9 @@ static Jit s_HandlerJit;
 static PointerMap<HookData> s_UserToData;
 static PointerMap<size_t> s_OrigToEntry;
 static HookData s_HookDatas[HookMax];
+
+static PointerMap<PltHookData> s_UserToPltData;
+static PltHookData s_PltDatas[HookMax];
 //static nn::os::MutexType hookMutex;
 
 //-------------------------------------------------------------------------
@@ -662,6 +670,19 @@ void* FindSuitableMemory(size_t size) {
     return located;
 }
 
+static bool (*ResolveSymOriginal)(const rtld::ModuleObject*, Elf_Addr*, Elf_Sym*);
+
+bool ResolveSymReplacement(const rtld::ModuleObject* obj, Elf_Addr* target_symbol_address, Elf_Sym* symbol) {
+    const char* name = &obj->dynstr[symbol->st_name];
+    auto name_hash = __rtld_elf_hash(name) << 3;
+    const PltHookData* data = s_UserToPltData.Get(static_cast<uintptr_t>(name_hash));
+    if (data != nullptr) {
+        *target_symbol_address = static_cast<Elf_Addr>(data->callback);
+        return true;
+    }
+    return ResolveSymOriginal(obj, target_symbol_address, symbol);
+}
+
 void Initialize() {
     /* TODO: thread safety */
     void* handler_mem = FindSuitableMemory(HandlerPoolSize);
@@ -678,6 +699,15 @@ void Initialize() {
     /*static u8 _inlhk_rw[InlineHookPoolSize];
     rc = jitCreate(&__inlhk_jit, &_inlhk_rw, InlineHookPoolSize);
     R_ABORT_UNLESS(rc);*/
+
+    rtld::ModuleObject* self_object = exl::util::GetSelfModuleInfo().m_ModuleObject;
+    install_hook_in_plt(
+        self_object,
+        reinterpret_cast<const void*>(_ZNK2nn2ro6detail8RoModule10ResolveSymEPmNS1_3Elf5Elf643SymE),
+        reinterpret_cast<const void*>(ResolveSymReplacement),
+        reinterpret_cast<void**>(&ResolveSymOriginal),
+        HookHandlerType::Hook
+    );
 }
 
 //-------------------------------------------------------------------------
@@ -992,6 +1022,100 @@ extern "C" const void* install_hook(const void* symbol, const void* replace, Hoo
     EXL_ASSERT(s_OrigToEntry.Insert(reinterpret_cast<uintptr_t>(symbol), current), "Unable to insert symbol into map");
 
     return generate_impl ? reinterpret_cast<const void*>(trampoline) : nullptr;
+}
+
+extern "C" void install_hook_in_plt(rtld::ModuleObject* host_object, const void* function, const void* replace, void** out_trampoline, HookHandlerType ty) {
+    static volatile s32 index = -1;
+    const char* name = host_object->GetRelocNameByTargetAddress(reinterpret_cast<Elf_Addr>(function));
+    EXL_ASSERT(name != nullptr);
+
+    auto name_hash = __rtld_elf_hash(name) << 3;
+    PltHookData* data = s_UserToPltData.GetMut(static_cast<uintptr_t>(name_hash));
+    bool perform_got_replacement = false;
+    if (data != nullptr) {
+        // If there is already a PLT hook here, then we have to deal with chaining protocol
+        // The first step is to see if the current hook has a priority which is lower than
+        // the one we are attempting to install
+        if (data->ty > ty) {
+            // If this is the case, then we are going to move the first hook after this one
+            size_t new_index = static_cast<size_t>(__atomic_increase(&index));
+            s_PltDatas[new_index] = *data;
+
+            data->callback = reinterpret_cast<uintptr_t>(replace);
+            data->next = &s_PltDatas[new_index];
+            data->p_callback_trampoline = reinterpret_cast<uintptr_t*>(out_trampoline);
+            data->ty = ty;
+            // The lucky part of this condition is that since we are inserting at the front, we don't have to change any
+            // user's trampoline, except the installer's
+
+            *out_trampoline = reinterpret_cast<void*>(s_PltDatas[new_index].callback);
+
+            // Because we are now the first in line, we need to modify all of the GOT sections of loaded modules
+            perform_got_replacement = true;
+        } else {
+            // If this is not the case, then we have to find the location to insert our new hook
+            // into the chain
+
+            // First, we should create our new PltData since we know already know what it's going to contain
+            size_t new_index = static_cast<size_t>(__atomic_increase(&index));
+            s_PltDatas[new_index] = PltHookData {
+                .callback = reinterpret_cast<uintptr_t>(replace),
+                .next = nullptr,
+                .p_callback_trampoline = reinterpret_cast<uintptr_t*>(out_trampoline),
+                .ty = ty
+            };
+
+            // Find the first user callback that we have a higher priority than.
+            while ((data->next != nullptr) && (data->next->ty <= ty))
+                data = data->next;
+
+            // We have to do the following to ensure a valid chain:
+            // 1. Change the `next` ptr on `data` to be our new data, since data is the
+            //      hook that we are installing *after*
+            // 2. Change the value of `p_callback_trampoline` on `data` to be the callback of our
+            //      new data
+            // 3. Change the value of `out_trampoline` to be the value of `p_callback_trampoline` from `data`
+            // 4. Set the `next` field of our new data to the previous `data`
+
+            auto prev_next = data->next;
+            auto prev_trampoline = *data->p_callback_trampoline;
+
+            data->next = &s_PltDatas[new_index];
+            *data->p_callback_trampoline = s_PltDatas[new_index].callback;
+            s_PltDatas[new_index].next = prev_next;
+            *s_PltDatas[new_index].p_callback_trampoline = prev_trampoline;
+        }
+    } else {
+        // There are no hooks present for this so we are simply installing a new one into the table
+        EXL_ASSERT(s_UserToPltData.Insert(static_cast<uintptr_t>(name_hash), PltHookData {
+            .callback = reinterpret_cast<uintptr_t>(replace),
+            .next = nullptr,
+            .p_callback_trampoline = reinterpret_cast<uintptr_t*>(out_trampoline),
+            .ty = ty
+        }));
+        *out_trampoline = const_cast<void*>(function);
+
+        // Because this is a new hook, we have to perform a GOT replacement
+        perform_got_replacement = true;
+    }
+
+    if (!perform_got_replacement) return;
+
+
+    if (nn::ro::detail::g_pAutoLoadList->back != (ModuleObject*)nn::ro::detail::g_pAutoLoadList) {
+        for (ModuleObject *module : *nn::ro::detail::g_pAutoLoadList) {
+            module->TryPatchAbsoluteReloc(reinterpret_cast<Elf_Addr>(replace), name);
+            module->TryPatchReloc(reinterpret_cast<Elf_Addr>(replace), name);
+        }
+    }
+
+    if (nn::ro::detail::g_pManualLoadList->back != (ModuleObject *)nn::ro::detail::g_pManualLoadList) {
+        for (ModuleObject *module : *nn::ro::detail::g_pManualLoadList) {
+            module->TryPatchAbsoluteReloc(reinterpret_cast<Elf_Addr>(replace), name);
+            module->TryPatchReloc(reinterpret_cast<Elf_Addr>(replace), name);
+        }
+    }
+
 }
 
 extern "C" void set_hook_enable(const void* replace, bool enable) {

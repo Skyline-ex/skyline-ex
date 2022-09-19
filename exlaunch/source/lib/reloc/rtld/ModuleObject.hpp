@@ -18,6 +18,10 @@ struct ModuleObject {
     inline void ResolveSymbolRelJumpSlot(Elf_Rel *entry, bool do_lazy_got_init);
     inline void ResolveSymbolRelaJumpSlot(Elf_Rela *entry,
                                           bool do_lazy_got_init);
+    inline const char* GetRelNameByTargetAddress(Elf_Rel *entry, Elf_Addr target_address);
+    inline const char* GetRelaNameByTargetAddress(Elf_Rela *entry, Elf_Addr target_address);
+    inline bool TryPatchAbsoluteRelocImpl(Elf_Addr replacement_address, const char* name, Elf_Rel* entry);
+    inline bool TryPatchRelocImpl(Elf_Addr replacement_address, const char* name, Elf_Rel* entry);
 
    public:
     struct ModuleObject *next;
@@ -61,6 +65,9 @@ struct ModuleObject {
     Elf_Sym *GetSymbolByName(const char *name);
     void ResolveSymbols(bool do_lazy_got_init);
     bool TryResolveSymbol(Elf_Addr *target_symbol_address, Elf_Sym *symbol);
+    const char* GetRelocNameByTargetAddress(Elf_Addr target_address);
+    bool TryPatchAbsoluteReloc(Elf_Addr replacement_address, const char* name);
+    bool TryPatchReloc(Elf_Addr replacement_address, const char* name);
 };
 
 #ifdef __RTLD_6XX__

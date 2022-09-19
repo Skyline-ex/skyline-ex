@@ -58,6 +58,9 @@ namespace exl::util {
                     curModInfo.m_Total.m_Start = meminfo.addr;
                     curModInfo.m_Text.m_Start = meminfo.addr;
                     curModInfo.m_Text.m_Size = meminfo.size;
+
+                    rtld::ModuleHeader* header = reinterpret_cast<rtld::ModuleHeader*>(meminfo.addr + *reinterpret_cast<u32*>(meminfo.addr + 4));
+                    curModInfo.m_ModuleObject = reinterpret_cast<rtld::ModuleObject*>(reinterpret_cast<char*>(header) + header->module_object_offset);
                     state =  State::ExpectingRodata;
                     break;
                 }

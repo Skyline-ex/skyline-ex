@@ -2,6 +2,7 @@
 
 #include "common.hpp"
 #include <array>
+#include "lib/reloc/rtld.hpp"
 
 namespace exl::util {
 
@@ -17,6 +18,7 @@ namespace exl::util {
         Range m_Text;
         Range m_Rodata;
         Range m_Data;
+        rtld::ModuleObject* m_ModuleObject;
         /* TODO: bss? */
     };
 

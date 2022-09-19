@@ -379,4 +379,102 @@ void ModuleObject::ResolveSymbols(bool do_lazy_got_init) {
     }
 }
 
+const char* ModuleObject::GetRelNameByTargetAddress(Elf_Rel *entry, Elf_Addr target_address) {
+    uint32_t r_type = ELF_R_TYPE(entry->r_info);
+    uint32_t r_sym = ELF_R_SYM(entry->r_info);
+
+    if (ARCH_IS_REL_ABSOLUTE(r_type) || r_type == ARCH_GLOB_DAT) {
+        Elf_Sym *symbol = &this->dynsym[r_sym];
+        if (*reinterpret_cast<Elf_Addr *>(this->module_base + entry->r_offset) == target_address) {
+            return &this->dynstr[symbol->st_name];
+        }
+    }
+    return nullptr;
+}
+
+const char* ModuleObject::GetRelaNameByTargetAddress(Elf_Rela *entry, Elf_Addr target_address) {
+    uint32_t r_type = ELF_R_TYPE(entry->r_info);
+    uint32_t r_sym = ELF_R_SYM(entry->r_info);
+
+    if (ARCH_IS_REL_ABSOLUTE(r_type) || r_type == ARCH_GLOB_DAT) {
+        Elf_Sym* symbol = &this->dynsym[r_sym];
+        if ((*reinterpret_cast<Elf_Addr *>(this->module_base + entry->r_offset) + entry->r_addend) == target_address) {
+            return &this->dynstr[symbol->st_name];
+        }
+    }
+    return nullptr;
+}
+
+const char* ModuleObject::GetRelocNameByTargetAddress(Elf_Addr target_address) {
+    const char* name = nullptr;
+    for (auto index = this->rel_count;
+         (name == nullptr) && (index < this->rel_dyn_size / sizeof(Elf_Rel)); index++) {
+        Elf_Rel *entry = &this->rela_or_rel.rel[index];
+        name = this->GetRelNameByTargetAddress(entry, target_address);
+    }
+
+    for (auto index = this->rela_count;
+         (name == nullptr) && (index < this->rela_dyn_size / sizeof(Elf_Rela)); index++) {
+        Elf_Rela *entry = &this->rela_or_rel.rela[index];
+        name = this->GetRelaNameByTargetAddress(entry, target_address);
+    }
+
+    return name;
+}
+
+bool ModuleObject::TryPatchAbsoluteRelocImpl(Elf_Addr replacement_address, const char* name, Elf_Rel* entry) {
+    uint32_t r_type = ELF_R_TYPE(entry->r_info);
+    uint32_t r_sym = ELF_R_SYM(entry->r_info);
+    if (!ARCH_IS_REL_ABSOLUTE(r_type) && r_type != ARCH_GLOB_DAT) return false;
+    Elf_Sym* symbol = &this->dynsym[r_sym];
+    const char* symbol_name = &this->dynstr[symbol->st_name];
+    if (strcmp(symbol_name, name) != 0) return false;
+
+    *reinterpret_cast<Elf_Addr*>(this->module_base + entry->r_offset) = replacement_address;
+    return true;
+}
+
+bool ModuleObject::TryPatchRelocImpl(Elf_Addr replacement_address, const char* name, Elf_Rel* entry) {
+    uint32_t r_type = ELF_R_TYPE(entry->r_info);
+    uint32_t r_sym = ELF_R_SYM(entry->r_info);
+    if (r_type != ARCH_JUMP_SLOT) return false;
+
+    Elf_Sym* symbol = &this->dynsym[r_sym];
+    const char* symbol_name = &this->dynstr[symbol->st_name];
+    if (strcmp(symbol_name, name) != 0) return false;
+
+    *reinterpret_cast<Elf_Addr*>(this->module_base + entry->r_offset) = replacement_address;
+    return true;
+}
+
+bool ModuleObject::TryPatchAbsoluteReloc(Elf_Addr replacement_address, const char* name) {
+    for (auto index = this->rel_count; index < this->rel_dyn_size / sizeof(Elf_Rel); index++) {
+        Elf_Rel* entry = &this->rela_or_rel.rel[index];
+        if (this->TryPatchAbsoluteRelocImpl(replacement_address, name, entry))
+            return true;
+    }
+
+    for (auto index = this->rela_count; index < this->rela_dyn_size / sizeof(Elf_Rela); index++) {
+        Elf_Rel* entry = reinterpret_cast<Elf_Rel*>(&this->rela_or_rel.rela[index]);
+        if (this->TryPatchAbsoluteRelocImpl(replacement_address, name, entry))
+            return true;
+    }
+    return false;
+}
+
+bool ModuleObject::TryPatchReloc(Elf_Addr replacement_address, const char* name) {
+    for (uint64_t index = 0; index < this->rela_or_rel_plt_size / sizeof(Elf_Rel); index++) {
+        Elf_Rel* entry = &this->rela_or_rel_plt.rel[index];
+        if (this->TryPatchRelocImpl(replacement_address, name, entry))
+            return true;
+    }
+
+    for (uint64_t index = 0; index < this->rela_or_rel_plt_size / sizeof(Elf_Rela); index++) {
+        Elf_Rel* entry = reinterpret_cast<Elf_Rel*>(&this->rela_or_rel_plt.rela[index]);
+        if (this->TryPatchRelocImpl(replacement_address, name, entry))
+            return true;
+    }
+    return false;
+}
+
 }  // namespace rtld
