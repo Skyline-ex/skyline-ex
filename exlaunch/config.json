@@ -14,7 +14,7 @@
 	"filesystem_access":	{
 		"permissions":	"0xffffffffffffffff"
 	},
-	"service_access":	["acc:u0", "aoc:u", "apm", "appletOE", "audin:u", "audout:u", "audren:u", "banana", "bcat:u", "bsd:u", "bsdcfg", "caps:su", "caps:u", "csrng", "friend:u", "fsp-srv", "hid", "htc", "htc:tenv", "htcs", "hwopus", "irs", "ldn:u", "ldr:ro", "lm", "mii:u", "mm:u", "nfc:mf:u", "nfc:user", "nfp:user", "nifm:u", "nim:eca", "nsd:u", "ntc", "nvdrv", "pcm", "pctl", "pl:u", "prepo:u", "set", "sfdnsres", "ssl", "time:u", "vi:u"],
+	"service_access":	["acc:u0", "aoc:u", "apm", "appletOE", "audin:u", "audout:u", "audren:u", "banana", "bcat:u", "bsd:u", "bsdcfg", "caps:su", "caps:u", "csrng", "friend:u", "fsp-srv", "hid", "hid:hdr", "htc", "htc:tenv", "htcs", "hwopus", "irs", "ldn:u", "ldr:ro", "lm", "mii:u", "mm:u", "nfc:mf:u", "nfc:user", "nfp:user", "nifm:u", "nim:eca", "nsd:u", "ntc", "nvdrv", "pcm", "pctl", "pl:u", "prepo:u", "set", "sfdnsres", "ssl", "time:u", "vi:u"],
 	"service_host":	[],
 	"kernel_capabilities":	[{
 			"type":	"kernel_flags",
@@ -171,5 +171,38 @@
 				"allow_debug":	false,
 				"force_debug":	true
 			}
-		}]
+		}, {
+			"type": "map",
+			"value": {
+				"address": "0x07000f000",
+				"size": "0x1000",
+				"is_ro": true,
+				"is_io": true	
+			}
+		}, {
+			"type": "map",
+			"value": {
+				"address": "0x70090000",
+				"size": "0xa000",
+				"is_ro": false,
+				"is_io": true	
+			}
+		}, {
+			"type": "map",
+			"value": {
+				"address": "0x7009f000",
+				"size": "0x1000",
+				"is_ro": false,
+				"is_io": true	
+			}
+		}, {
+			"type": "map",
+			"value": {
+				"address": "0x700d0000",
+				"size": "0xa000",
+				"is_ro": false,
+				"is_io": true	
+			}
+		}
+	]
 }

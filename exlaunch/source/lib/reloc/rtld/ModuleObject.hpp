@@ -66,6 +66,7 @@ struct ModuleObject {
     void ResolveSymbols(bool do_lazy_got_init);
     bool TryResolveSymbol(Elf_Addr *target_symbol_address, Elf_Sym *symbol);
     const char* GetRelocNameByTargetAddress(Elf_Addr target_address);
+    Elf_Addr GetRelocByName(const char* name);
     bool TryPatchAbsoluteReloc(Elf_Addr replacement_address, const char* name);
     bool TryPatchReloc(Elf_Addr replacement_address, const char* name);
 };

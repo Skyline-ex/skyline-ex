@@ -95,4 +95,6 @@ namespace exl::util {
 
             ~RwPages();        
         };
+
+    extern "C" int protected_memcpy(void* dest, const void* src, size_t size);
 };

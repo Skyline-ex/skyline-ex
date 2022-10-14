@@ -83,6 +83,8 @@
     stp q26, q27, [sp, #0x2A0]
     stp q28, q29, [sp, #0x2C0]
     stp q30, q31, [sp, #0x2E0]
+
+    ldr x0, [sp]
 .endm
 
 # Recovers all of the GP registers from the stack

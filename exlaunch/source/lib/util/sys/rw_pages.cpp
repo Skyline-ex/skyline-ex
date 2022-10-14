@@ -97,4 +97,13 @@ namespace exl::util {
         /* Free RW reservation. */
         virtmemRemoveReservation(claim.m_RwReserve);
     }
+    
+    extern "C" int protected_memcpy(void* dest, const void* src, size_t size) {
+        if (dest == nullptr || src == nullptr)
+            return -1;
+
+        auto pages = RwPages(reinterpret_cast<uintptr_t>(dest), size);
+        memcpy(reinterpret_cast<void*>(pages.GetRw()), src, size);
+        return 0;
+    }
 };

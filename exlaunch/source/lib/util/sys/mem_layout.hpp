@@ -18,8 +18,9 @@ namespace exl::util {
         Range m_Text;
         Range m_Rodata;
         Range m_Data;
+        Range m_Bss;
+        const rtld::ModuleHeader* m_ModuleHeader;
         rtld::ModuleObject* m_ModuleObject;
-        /* TODO: bss? */
     };
 
     namespace mem_layout {

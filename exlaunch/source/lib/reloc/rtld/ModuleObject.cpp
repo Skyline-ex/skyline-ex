@@ -225,8 +225,8 @@ bool ModuleObject::TryResolveSymbol(Elf_Addr *target_symbol_address,
     } else {
         Elf_Addr address = lookup_global_auto(name);
 
-        if (address == 0 && ro::g_LookupGlobalManualFunctionPointer) {
-            address = ro::g_LookupGlobalManualFunctionPointer(name);
+        if (address == 0) {
+            address = lookup_global_manual(name);
         }
 
         if (address != 0) {
@@ -321,7 +321,8 @@ void ModuleObject::ResolveSymbolRelaJumpSlot(Elf_Rela *entry,
         }
 
         if (this->got_stub_ptr) {
-            EXL_ASSERT(this->got_stub_ptr == (void*) target_address);
+            if (this->got_stub_ptr != (void*)target_address) { return; }
+            // EXL_ASSERT(this->got_stub_ptr == (void*) target_address);
         } else {
             this->got_stub_ptr = (void *)target_address;
         }
@@ -475,6 +476,53 @@ bool ModuleObject::TryPatchReloc(Elf_Addr replacement_address, const char* name)
             return true;
     }
     return false;
+}
+
+Elf_Addr ModuleObject::GetRelocByName(const char* name) {
+    for (auto index = this->rel_count; index < this->rel_dyn_size / sizeof(Elf_Rel); index++) {
+        Elf_Rel* entry = &this->rela_or_rel.rel[index];
+        uint32_t r_type = ELF_R_TYPE(entry->r_info);
+        uint32_t r_sym = ELF_R_SYM(entry->r_info);
+        if (!ARCH_IS_REL_ABSOLUTE(r_type) && r_type != ARCH_GLOB_DAT) continue;
+        Elf_Sym* symbol = &this->dynsym[r_sym];
+        const char* symbol_name = &this->dynstr[symbol->st_name];
+        if (strcmp(symbol_name, name) == 0) 
+            return *reinterpret_cast<Elf_Addr*>(this->module_base + entry->r_offset);
+    }
+
+    for (auto index = this->rela_count; index < this->rela_dyn_size / sizeof(Elf_Rela); index++) {
+        Elf_Rel* entry = reinterpret_cast<Elf_Rel*>(&this->rela_or_rel.rela[index]);
+        uint32_t r_type = ELF_R_TYPE(entry->r_info);
+        uint32_t r_sym = ELF_R_SYM(entry->r_info);
+        if (!ARCH_IS_REL_ABSOLUTE(r_type) && r_type != ARCH_GLOB_DAT) continue;
+        Elf_Sym* symbol = &this->dynsym[r_sym];
+        const char* symbol_name = &this->dynstr[symbol->st_name];
+        if (strcmp(symbol_name, name) == 0) 
+            return *reinterpret_cast<Elf_Addr*>(this->module_base + entry->r_offset);
+    }
+
+    for (uint64_t index = 0; index < this->rela_or_rel_plt_size / sizeof(Elf_Rel); index++) {
+        Elf_Rel* entry = &this->rela_or_rel_plt.rel[index];
+        uint32_t r_type = ELF_R_TYPE(entry->r_info);
+        uint32_t r_sym = ELF_R_SYM(entry->r_info);
+        if (r_type != ARCH_JUMP_SLOT) continue;
+        Elf_Sym* symbol = &this->dynsym[r_sym];
+        const char* symbol_name = &this->dynstr[symbol->st_name];
+        if (strcmp(symbol_name, name) == 0) 
+            return *reinterpret_cast<Elf_Addr*>(this->module_base + entry->r_offset);
+    }
+
+    for (uint64_t index = 0; index < this->rela_or_rel_plt_size / sizeof(Elf_Rela); index++) {
+        Elf_Rel* entry = reinterpret_cast<Elf_Rel*>(&this->rela_or_rel_plt.rela[index]);
+        uint32_t r_type = ELF_R_TYPE(entry->r_info);
+        uint32_t r_sym = ELF_R_SYM(entry->r_info);
+        if (r_type != ARCH_JUMP_SLOT) continue;
+        Elf_Sym* symbol = &this->dynsym[r_sym];
+        const char* symbol_name = &this->dynstr[symbol->st_name];
+        if (strcmp(symbol_name, name) == 0) 
+            return *reinterpret_cast<Elf_Addr*>(this->module_base + entry->r_offset);
+    }
+    return 0;
 }
 
 }  // namespace rtld

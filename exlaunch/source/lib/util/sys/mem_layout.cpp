@@ -60,7 +60,10 @@ namespace exl::util {
                     curModInfo.m_Text.m_Size = meminfo.size;
 
                     rtld::ModuleHeader* header = reinterpret_cast<rtld::ModuleHeader*>(meminfo.addr + *reinterpret_cast<u32*>(meminfo.addr + 4));
+                    curModInfo.m_ModuleHeader = header;
                     curModInfo.m_ModuleObject = reinterpret_cast<rtld::ModuleObject*>(reinterpret_cast<char*>(header) + header->module_object_offset);
+                    curModInfo.m_Bss.m_Start = reinterpret_cast<uintptr_t>(reinterpret_cast<char*>(header) + header->bss_start_offset);
+                    curModInfo.m_Bss.m_Size = static_cast<size_t>(header->bss_end_offset - header->bss_start_offset);
                     state =  State::ExpectingRodata;
                     break;
                 }

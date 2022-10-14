@@ -37,10 +37,10 @@
 namespace exl::hook::nx64 {
 
     enum HookHandlerType : unsigned char {
-        Hook = 0,
-        Inline = 1,
-        InlineEx = 2,
-        Detour = 3
+        Detour = 0,
+        InlineEx = 1,
+        Inline = 2,
+        Hook = 3
     };
 
     struct HookData;
@@ -148,6 +148,7 @@ namespace exl::hook::nx64 {
 
     extern "C" const void* install_hook(const void* symbol, const void* replace, HookHandlerType ty);
     extern "C" void install_hook_in_plt(rtld::ModuleObject* host_object, const void* function, const void* replace, void** out_trampoline, HookHandlerType ty);
-
+    extern "C" void install_future_hook_in_plt(rtld::ModuleObject* host_object, char* name, const void* replace, void** out_trampoline, HookHandlerType ty);
+    extern "C" void set_hook_enable(const void* replace, const void* symbol, bool enable);
     //void InlineHook(uintptr_t addr, InlineCallback* callback);
 };

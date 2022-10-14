@@ -675,8 +675,12 @@ static bool (*ResolveSymOriginal)(const rtld::ModuleObject*, Elf_Addr*, Elf_Sym*
 bool ResolveSymReplacement(const rtld::ModuleObject* obj, Elf_Addr* target_symbol_address, Elf_Sym* symbol) {
     const char* name = &obj->dynstr[symbol->st_name];
     auto name_hash = __rtld_elf_hash(name) << 3;
-    const PltHookData* data = s_UserToPltData.Get(static_cast<uintptr_t>(name_hash));
+    PltHookData* data = s_UserToPltData.GetMut(static_cast<uintptr_t>(name_hash));
     if (data != nullptr) {
+        PltHookData* last = data;
+        while (last->next != nullptr) last = last->next;
+        if (*last->p_callback_trampoline == 0)
+            ResolveSymOriginal(obj, reinterpret_cast<Elf_Addr*>(last->p_callback_trampoline), symbol);
         *target_symbol_address = static_cast<Elf_Addr>(data->callback);
         return true;
     }
@@ -880,6 +884,8 @@ const void* chain_hook(
         .is_enabled = true
     };
 
+    auto map_key = reinterpret_cast<uintptr_t>(replace) ^ reinterpret_cast<uintptr_t>(symbol);
+
     if (ty == HookHandlerType::Hook && !is_higher_priority) {
         auto hook_data_idx = static_cast<size_t>(__atomic_increase(hook_index));
         if (hook_data_idx > HookMax)
@@ -905,15 +911,15 @@ const void* chain_hook(
         rw.context.data = &s_HookDatas[hook_data_idx];
 
         data->trampoline = reinterpret_cast<uintptr_t>(new_rx.handler.data());
-        EXL_ASSERT(s_UserToData.Insert(reinterpret_cast<uintptr_t>(replace), new_data), "Failed to insert user hook into map");
+        EXL_ASSERT(s_UserToData.Insert(reinterpret_cast<uintptr_t>(map_key), new_data), "Failed to insert user hook into map");
         new_rw.context.data = s_UserToData.GetMut(reinterpret_cast<uintptr_t>(replace));
         R_ABORT_UNLESS(jitTransitionToExecutable(&s_HandlerJit));
         return reinterpret_cast<const void*>(rx.handler.data());
     }
 
-    EXL_ASSERT(s_UserToData.Insert(reinterpret_cast<uintptr_t>(replace), new_data), "Failed to insert user hook into map");
+    EXL_ASSERT(s_UserToData.Insert(reinterpret_cast<uintptr_t>(map_key), new_data), "Failed to insert user hook into map");
 
-    auto* p_new_data = s_UserToData.GetMut(reinterpret_cast<uintptr_t>(replace));
+    auto* p_new_data = s_UserToData.GetMut(reinterpret_cast<uintptr_t>(map_key));
 
     if (is_higher_priority) {
         new_rw.context.data = data;
@@ -1010,11 +1016,14 @@ extern "C" const void* install_hook(const void* symbol, const void* replace, Hoo
         .is_enabled = true
     };
 
-    if (!s_UserToData.Insert(reinterpret_cast<uintptr_t>(replace), data)) {
+
+    auto map_key = reinterpret_cast<uintptr_t>(replace) ^ reinterpret_cast<uintptr_t>(symbol);
+
+    if (!s_UserToData.Insert(map_key, data)) {
         EXL_ABORT(result::HookFailed);
     }
 
-    auto* hook_data = s_UserToData.GetMut(reinterpret_cast<uintptr_t>(replace));
+    auto* hook_data = s_UserToData.GetMut(map_key);
     rw.context.data = hook_data;
 
     jitTransitionToExecutable(&s_HandlerJit);
@@ -1024,8 +1033,8 @@ extern "C" const void* install_hook(const void* symbol, const void* replace, Hoo
     return generate_impl ? reinterpret_cast<const void*>(trampoline) : nullptr;
 }
 
+static volatile s32 s_PltIndex = -1;
 extern "C" void install_hook_in_plt(rtld::ModuleObject* host_object, const void* function, const void* replace, void** out_trampoline, HookHandlerType ty) {
-    static volatile s32 index = -1;
     const char* name = host_object->GetRelocNameByTargetAddress(reinterpret_cast<Elf_Addr>(function));
     EXL_ASSERT(name != nullptr);
 
@@ -1038,7 +1047,7 @@ extern "C" void install_hook_in_plt(rtld::ModuleObject* host_object, const void*
         // the one we are attempting to install
         if (data->ty > ty) {
             // If this is the case, then we are going to move the first hook after this one
-            size_t new_index = static_cast<size_t>(__atomic_increase(&index));
+            size_t new_index = static_cast<size_t>(__atomic_increase(&s_PltIndex));
             s_PltDatas[new_index] = *data;
 
             data->callback = reinterpret_cast<uintptr_t>(replace);
@@ -1057,7 +1066,7 @@ extern "C" void install_hook_in_plt(rtld::ModuleObject* host_object, const void*
             // into the chain
 
             // First, we should create our new PltData since we know already know what it's going to contain
-            size_t new_index = static_cast<size_t>(__atomic_increase(&index));
+            size_t new_index = static_cast<size_t>(__atomic_increase(&s_PltIndex));
             s_PltDatas[new_index] = PltHookData {
                 .callback = reinterpret_cast<uintptr_t>(replace),
                 .next = nullptr,
@@ -1118,8 +1127,82 @@ extern "C" void install_hook_in_plt(rtld::ModuleObject* host_object, const void*
 
 }
 
-extern "C" void set_hook_enable(const void* replace, bool enable) {
-    auto* hook_data = s_UserToData.GetMut(reinterpret_cast<uintptr_t>(replace));
+extern "C" void install_future_hook_in_plt(rtld::ModuleObject* host_object, char* name, const void* replace, void** out_trampoline, HookHandlerType ty) {
+    auto function = host_object->GetRelocByName(name);
+    if (function != 0) {
+        install_hook_in_plt(host_object, reinterpret_cast<const void*>(function), replace, out_trampoline, ty);
+        return;
+    }
+
+    auto name_hash = __rtld_elf_hash(name) << 3;
+    PltHookData* data = s_UserToPltData.GetMut(static_cast<uintptr_t>(name_hash));
+    if (data != nullptr) {
+        // If there is already a PLT hook here, then we have to deal with chaining protocol
+        // The first step is to see if the current hook has a priority which is lower than
+        // the one we are attempting to install
+        if (data->ty > ty) {
+            // If this is the case, then we are going to move the first hook after this one
+            size_t new_index = static_cast<size_t>(__atomic_increase(&s_PltIndex));
+            s_PltDatas[new_index] = *data;
+
+            data->callback = reinterpret_cast<uintptr_t>(replace);
+            data->next = &s_PltDatas[new_index];
+            data->p_callback_trampoline = reinterpret_cast<uintptr_t*>(out_trampoline);
+            data->ty = ty;
+            // The lucky part of this condition is that since we are inserting at the front, we don't have to change any
+            // user's trampoline, except the installer's
+
+            *out_trampoline = reinterpret_cast<void*>(s_PltDatas[new_index].callback);
+
+            // Because we are now the first in line, we need to modify all of the GOT sections of loaded modules
+        } else {
+            // If this is not the case, then we have to find the location to insert our new hook
+            // into the chain
+
+            // First, we should create our new PltData since we know already know what it's going to contain
+            size_t new_index = static_cast<size_t>(__atomic_increase(&s_PltIndex));
+            s_PltDatas[new_index] = PltHookData {
+                .callback = reinterpret_cast<uintptr_t>(replace),
+                .next = nullptr,
+                .p_callback_trampoline = reinterpret_cast<uintptr_t*>(out_trampoline),
+                .ty = ty
+            };
+
+            // Find the first user callback that we have a higher priority than.
+            while ((data->next != nullptr) && (data->next->ty <= ty))
+                data = data->next;
+
+            // We have to do the following to ensure a valid chain:
+            // 1. Change the `next` ptr on `data` to be our new data, since data is the
+            //      hook that we are installing *after*
+            // 2. Change the value of `p_callback_trampoline` on `data` to be the callback of our
+            //      new data
+            // 3. Change the value of `out_trampoline` to be the value of `p_callback_trampoline` from `data`
+            // 4. Set the `next` field of our new data to the previous `data`
+
+            auto prev_next = data->next;
+            auto prev_trampoline = *data->p_callback_trampoline;
+
+            data->next = &s_PltDatas[new_index];
+            *data->p_callback_trampoline = s_PltDatas[new_index].callback;
+            s_PltDatas[new_index].next = prev_next;
+            *s_PltDatas[new_index].p_callback_trampoline = prev_trampoline;
+        }
+    } else {
+        // There are no hooks present for this so we are simply installing a new one into the table
+        EXL_ASSERT(s_UserToPltData.Insert(static_cast<uintptr_t>(name_hash), PltHookData {
+            .callback = reinterpret_cast<uintptr_t>(replace),
+            .next = nullptr,
+            .p_callback_trampoline = reinterpret_cast<uintptr_t*>(out_trampoline),
+            .ty = ty
+        }));
+    }
+
+}
+
+extern "C" void set_hook_enable(const void* replace, const void* symbol, bool enable) {
+    auto map_key = reinterpret_cast<uintptr_t>(replace) ^ reinterpret_cast<uintptr_t>(symbol);
+    auto* hook_data = s_UserToData.GetMut(reinterpret_cast<uintptr_t>(map_key));
     hook_data->is_enabled = enable;
 }
 

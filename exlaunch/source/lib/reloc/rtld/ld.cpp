@@ -15,6 +15,30 @@ Elf_Addr rtld::lookup_global_auto(const char *name) {
     return 0;
 }
 
+Elf_Addr rtld::lookup_global_manual(const char *name) {
+    if (ro::g_pAutoLoadList->back == (ModuleObject *)ro::g_pManualLoadList) {
+        return 0;
+    }
+
+    for (ModuleObject *module : *ro::g_pManualLoadList) {
+        Elf_Sym *symbol = module->GetSymbolByName(name);
+        if (symbol && ELF_ST_BIND(symbol->st_info)) {
+            return (Elf_Addr)module->module_base + symbol->st_value;
+        }
+    }
+    return 0;
+}
+
+extern "C" void __rtld_resolve_self() {
+    MemoryInfo info;
+    u32 tmp;
+
+    R_ABORT_UNLESS(svcQueryMemory(&info, &tmp, reinterpret_cast<u64>(__rtld_resolve_self)));
+    rtld::ModuleHeader* header = reinterpret_cast<rtld::ModuleHeader*>(info.addr + *reinterpret_cast<const u32*>(info.addr + 4));
+    rtld::ModuleObject* object = reinterpret_cast<rtld::ModuleObject*>(reinterpret_cast<char*>(header) + header->module_object_offset);
+    object->ResolveSymbols(false);
+}
+
 extern "C" Elf_Addr __rtld_lazy_bind_symbol(ModuleObject *module,
                                             size_t index) {
     if (module->is_rela) {
