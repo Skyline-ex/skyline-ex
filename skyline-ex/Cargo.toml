@@ -7,8 +7,8 @@ authors = ["Shadów", "blujay", "Raytwo"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 nn = { path = "../../nn-rs" }
-skyline = { path = "../../skylinex", features = ["static-module"] }
-loader = { path = "../../loader" }
+skyline = { git = "https://github.com/Skyline-ex/skylinex", features = ["static-module"] }
+loader = { git = "https://github.com/Skyline-ex/loader" }
 nnsdk = "0.2.0"
 ninput = { git = "https://github.com/blu-dev/ninput", version = "0.1.0" }
 
